@@ -15,30 +15,34 @@ public class ElevatorSubsystem extends SubsystemBase {
 
   private CANSparkMax elevMotor;
   private RelativeEncoder enc;
-  private double speedCap;
+  private double maxSpeed; // max manual speed
 
   private PIDController pid;
   private double previousError;
   private double currentError;
-
+  private boolean pidOn;
   private double topEncLimit;
   private double bottomEncLimit;
 
   private DigitalInput topLimitSwitch;
   private DigitalInput bottomLimitSwitch;
 
+  private double setpoint;
+
   public ElevatorSubsystem() {
     elevMotor = new CANSparkMax(ElevatorConstants.ELEVATOR_PORT, MotorType.kBrushless);
     topLimitSwitch = new DigitalInput(ElevatorConstants.TOP_LS_PORT);
     bottomLimitSwitch = new DigitalInput(ElevatorConstants.BOTTOM_LS_PORT);
     enc = elevMotor.getEncoder();
-    speedCap = ElevatorConstants.SPEED_CAP;
+    maxSpeed = ElevatorConstants.SPEED_CAP;
     elevMotor.setIdleMode(IdleMode.kBrake);
     topEncLimit = ElevatorConstants.TOP_ENC_LIMIT;
     bottomEncLimit = ElevatorConstants.BOTTOM_ENC_LIMIT;
     pid = new PIDController(0.0, 0.0, 0.0);
     previousError = 0;
     pid.setTolerance(1);
+    setpoint = enc.getPosition();
+
   }
 
   ////////////////////////
@@ -49,38 +53,42 @@ public class ElevatorSubsystem extends SubsystemBase {
     return enc.getPosition();
   }
 
-  public boolean getTopLimitSwitch() {
+  public boolean topSwitchPressed() { //should return true if top limit switch pressed
     return topLimitSwitch.get();
   }
 
-  public boolean getBottomLimitSwitch() {
+  public boolean bottomSwitchPressed() { //should return true if bottom limit switch pressed
     return bottomLimitSwitch.get();
   }
 
   //////////////////////////////
   //  Basic Movement Methods  //
   //////////////////////////////
-
+  
+  // Deadzone includes a speedcap at 0.5 in either direction
+  public double deadzone(double speed) {
+    if (Math.abs(speed) < 0.1) {
+      return 0;
+    }
+    else if (speed > maxSpeed) {
+      return maxSpeed;
+    }
+    else if (speed < maxSpeed) {
+      return maxSpeed;
+    }
+    else {
+      return speed;
+    }
+  }
+  
+  //Stops the elevator motor
   public void elevStop(){
-    elevMotor.stopMotor();
+    elevMotor.set(0);
   }
 
-  public void toBottom(){
-    if (getEnc() > -50) {
-      elevMotor.set(-0.5);
-    }
-    else {
-      elevStop();
-    }
-  }
-
-  public void toTop() {
-    if (getEnc() < 50) {
-      elevMotor.set(0.5);
-    }
-    else {
-      elevStop();
-    }
+  //Changes 
+  public void setpointTo(double value){
+    setpoint = value;
   }
 
   // Checks if limit switches are pressed to prevent movement in that direction
@@ -99,42 +107,19 @@ public class ElevatorSubsystem extends SubsystemBase {
     // }
 
     // This line is in case of no limitswitches and just sets motor to joystick speed
-    elevMotor.set(deadzone(speed)); 
-  }
-
-
-  // Deadzone includes a speedcap at 0.5 in either direction
-  public double deadzone(double speed) {
-    if (Math.abs(speed) < 0.1) {
-      return 0;
-    }
-    else if (speed > speedCap) {
-      return speedCap;
-    }
-    else if (speed < -speedCap) {
-      return -speedCap;
-    }
-    else {
-      return speed;
-    }
+    elevMotor.set(deadzone(speed));
   }
 
   //////////////////
   //  PID Methods //
   //////////////////
-  
-  public double calculateSpeed(double setpoint){
-    double error = pid.calculate(getEnc(), setpoint);
 
-    if (error > speedCap){
-      return speedCap;
-    }
-    else if (error < -speedCap){
-      return -speedCap;
-    }
-    else{
-      return error;
-    }
+  public void enablePid(){
+    pidOn = true;
+  }
+
+  public void disablePid(){
+    pidOn = false;
   }
 
   public void resetI(){
@@ -150,22 +135,30 @@ public class ElevatorSubsystem extends SubsystemBase {
     previousError = currentError;
   }
 
-  public void toTopPID(){
-    elevMotor.set(calculateSpeed(topEncLimit));
-  }
-
-  public void toBottomPID(){
-    elevMotor.set(calculateSpeed(bottomEncLimit));
-  }
-
   @Override
   public void periodic() {
-
     resetI();
+
+    double pidSpeed = 0;
+    if(pidOn){
+      pidSpeed = pid.calculate(enc.getPosition(), setpoint);
+    }
+    else{
+      pidSpeed = maxSpeed;
+    }
+
+    if(topSwitchPressed() && pidSpeed > 0){
+      pidSpeed = 0;
+    }
+    else if(bottomSwitchPressed() && pidSpeed < 0){
+      pidSpeed = 0;
+    }
+
+    elevMotor.set(pidSpeed);
 
     // SmartDashboard
     SmartDashboard.putNumber("Elevator Encoder", getEnc());
-    SmartDashboard.putBoolean("Elevator Top LS", getTopLimitSwitch());
-    SmartDashboard.putBoolean("Elevator Bottom LS", getBottomLimitSwitch());
+    SmartDashboard.putBoolean("Elevator Top LS", topSwitchPressed());
+    SmartDashboard.putBoolean("Elevator Bottom LS", bottomSwitchPressed());
   }
 }
