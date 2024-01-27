@@ -13,5 +13,6 @@ public final class Constants {
     public static final double SPEED_CAP = 0.5;
     public static final double TOP_ENC_LIMIT = 50;
     public static final double BOTTOM_ENC_LIMIT = -50;
+    public static final double MANUAL_SPEED = 0.2;
   }
 }

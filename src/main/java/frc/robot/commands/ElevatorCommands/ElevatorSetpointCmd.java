@@ -10,6 +10,7 @@ import frc.robot.subsystems.ElevatorSubsystem;
 public class ElevatorSetpointCmd extends Command {
   private ElevatorSubsystem elevSubsystem;
   private double setpoint;
+  
   public ElevatorSetpointCmd(ElevatorSubsystem elevSub, double setpoint) {
     elevSubsystem = elevSub;
     this.setpoint = setpoint;
@@ -30,11 +31,13 @@ public class ElevatorSetpointCmd extends Command {
 
   // Called once the command ends or is interrupted.
   @Override
-  public void end(boolean interrupted) {}
+  public void end(boolean interrupted){
+   elevSubsystem.elevStop();
+  }
 
   // Returns true when the command should end.
   @Override
   public boolean isFinished() {
-    return false;
+    return elevSubsystem.atSetpoint();
   }
 }

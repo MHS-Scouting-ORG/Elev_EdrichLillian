@@ -15,7 +15,7 @@ public class ElevatorSubsystem extends SubsystemBase {
 
   private CANSparkMax elevMotor;
   private RelativeEncoder enc;
-  private double maxSpeed; // max manual speed
+  private double speedCap;
 
   private PIDController pid;
   private double previousError;
@@ -28,20 +28,26 @@ public class ElevatorSubsystem extends SubsystemBase {
   private DigitalInput bottomLimitSwitch;
 
   private double setpoint;
+  private double manualSpeed;
 
   public ElevatorSubsystem() {
     elevMotor = new CANSparkMax(ElevatorConstants.ELEVATOR_PORT, MotorType.kBrushless);
     topLimitSwitch = new DigitalInput(ElevatorConstants.TOP_LS_PORT);
     bottomLimitSwitch = new DigitalInput(ElevatorConstants.BOTTOM_LS_PORT);
-    enc = elevMotor.getEncoder();
-    maxSpeed = ElevatorConstants.SPEED_CAP;
     elevMotor.setIdleMode(IdleMode.kBrake);
+
+    speedCap = ElevatorConstants.SPEED_CAP;
+    manualSpeed = ElevatorConstants.MANUAL_SPEED;
+
     topEncLimit = ElevatorConstants.TOP_ENC_LIMIT;
     bottomEncLimit = ElevatorConstants.BOTTOM_ENC_LIMIT;
+   
+    enc = elevMotor.getEncoder();
+    setpoint = enc.getPosition();
+
     pid = new PIDController(0.0, 0.0, 0.0);
     previousError = 0;
     pid.setTolerance(1);
-    setpoint = enc.getPosition();
 
   }
 
@@ -61,6 +67,10 @@ public class ElevatorSubsystem extends SubsystemBase {
     return bottomLimitSwitch.get();
   }
 
+  public boolean atSetpoint(){
+    return getEnc() > setpoint + 5 && getEnc() < setpoint - 5;
+  }
+
   //////////////////////////////
   //  Basic Movement Methods  //
   //////////////////////////////
@@ -70,11 +80,11 @@ public class ElevatorSubsystem extends SubsystemBase {
     if (Math.abs(speed) < 0.1) {
       return 0;
     }
-    else if (speed > maxSpeed) {
-      return maxSpeed;
+    else if (speed > speedCap) {
+      return speedCap;
     }
-    else if (speed < maxSpeed) {
-      return maxSpeed;
+    else if (speed < speedCap) {
+      return speedCap;
     }
     else {
       return speed;
@@ -88,7 +98,7 @@ public class ElevatorSubsystem extends SubsystemBase {
 
   //Changes 
   public void setpointTo(double value){
-    setpoint = value;
+    this.setpoint = value;
   }
 
   // Checks if limit switches are pressed to prevent movement in that direction
@@ -137,15 +147,16 @@ public class ElevatorSubsystem extends SubsystemBase {
 
   @Override
   public void periodic() {
+   
     resetI();
-
     double pidSpeed = 0;
     if(pidOn){
       pidSpeed = pid.calculate(enc.getPosition(), setpoint);
     }
     else{
-      pidSpeed = maxSpeed;
+      pidSpeed = manualSpeed;
     }
+    
 
     if(topSwitchPressed() && pidSpeed > 0){
       pidSpeed = 0;
